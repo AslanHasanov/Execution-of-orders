@@ -2,6 +2,6 @@
 {
     public abstract class BaseEntity<Tkey>
     {
-        public int Id { get; set; }
+        public Tkey Id { get; set; }
     }
 }

@@ -31,6 +31,9 @@ namespace DemoApplication.Database
         public DbSet<UserActivation> UserActivations { get; set; }
         public DbSet<BookImage> BookImages { get; set; }
 
+        public DbSet<Order> Orders { get; set; }
+        public DbSet<OrderProduct> OrderProducts { get; set; }
+
 
 
 

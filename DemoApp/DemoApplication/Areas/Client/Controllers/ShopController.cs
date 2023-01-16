@@ -1,4 +1,6 @@
 ﻿using DemoApplication.Areas.Client.ViewModels.Home.Index;
+using DemoApplication.Areas.Client.ViewModels.Shop;
+using DemoApplication.Attributs;
 using DemoApplication.Database;
 using DemoApplication.Services.Abstracts;
 using Microsoft.AspNetCore.Mvc;
@@ -10,53 +12,93 @@ namespace DemoApplication.Areas.Client.Controllers
 
     [Area("client")]
     [Route("shop")]
-    public class ShopController : Controller
+    public class ShoppingController : Controller
     {
         private readonly DataContext _dbContext;
-        private readonly IFileService _fileService;
+        private readonly IUserService _userService;
+        private readonly IOrderService _orderService;
 
-        public ShopController(DataContext dbContext,IFileService fileService)
+
+        public ShoppingController(DataContext dbContext, IUserService userService, IOrderService orderService)
         {
             _dbContext = dbContext;
-            _fileService = fileService;
+            _userService = userService;
+            _orderService = orderService;
         }
 
-        [HttpGet("index", Name = "client-shop-index")]
-        public async Task<IActionResult> Index(int sort,int page = 1)
+        [HttpGet("cart", Name = "client-shopping-cart")]
+        public IActionResult Cart()
         {
-            var model = new List<BookListItemViewModel>();
-           
-            switch (sort)
+            return View();
+        }
+        [HttpGet("checkout", Name = "client-shopping-checkout")]
+        [ServiceFilter(typeof(IsAuthenticated))]
+        public async Task<IActionResult> Checkout()
+        {
+
+
+            var model = new OrderViewModel
             {
-                case 1:
-                    model = await _dbContext.Books.Skip((page-1)*4).Take(4).OrderBy(b=> b.Title).Select
-                        (b => new BookListItemViewModel(b.Id, b.Title, $"{b.Author.FirstName} {b.Author.LastName}", b.Price, _fileService.GetFileUrl(b.ImageNameFileSystem,Contracts.File.UploadDirectory.Book))).ToListAsync();
-                    
-                    break;
-                case 2:
-                    model = await _dbContext.Books.Skip((page - 1) * 4).Take(4).OrderByDescending(b => b.Title).Select
-                        (b => new BookListItemViewModel(b.Id, b.Title, $"{b.Author.FirstName} {b.Author.LastName}", b.Price, _fileService.GetFileUrl(b.ImageNameFileSystem, Contracts.File.UploadDirectory.Book))).ToListAsync();
+                SumTotal = (int)_dbContext.BasketProducts
+                  .Where(bp => bp.Basket.UserId == _userService.CurrentUser.Id).Sum(bp => bp.Book.Price * bp.Quantity),
+                Models = await _dbContext.BasketProducts
+                  .Where(bp => bp.Basket.UserId == _userService.CurrentUser.Id)
+                  .Select(bp =>
+                      new OrderViewModel.ItemViewModel(
+                          bp.Id,
+                          bp.Book.Title,
+                          bp.Quantity,
+                          bp.Book.Price,
+                          bp.Book.Price * bp.Quantity
+                          ))
+                  .ToListAsync()
+            };
 
-                    break;
-                case 3:
-                    model = await _dbContext.Books.Skip((page - 1) * 4).Take(4).OrderBy(b => b.Price).Select
-                        (b => new BookListItemViewModel(b.Id, b.Title, $"{b.Author.FirstName} {b.Author.LastName}", b.Price, _fileService.GetFileUrl(b.ImageNameFileSystem, Contracts.File.UploadDirectory.Book))).ToListAsync();
-
-                    break;
-                case 4:
-                    model = await _dbContext.Books.Skip((page - 1) * 4).Take(4).OrderByDescending(b => b.Price).Select
-                        (b => new BookListItemViewModel(b.Id, b.Title, $"{b.Author.FirstName} {b.Author.LastName}", b.Price, _fileService.GetFileUrl(b.ImageNameFileSystem, Contracts.File.UploadDirectory.Book))).ToListAsync();
-
-                    break;
-                default:
-                    model = await _dbContext.Books.Skip((page - 1) * 4).Take(4).Select
-                        (b => new BookListItemViewModel(b.Id, b.Title, $"{b.Author.FirstName} {b.Author.LastName}", b.Price, _fileService.GetFileUrl(b.ImageNameFileSystem, Contracts.File.UploadDirectory.Book)))
-                        .ToListAsync();
-                    break;
-            }
-            ViewBag.CurrentPage = page;
-            ViewBag.TotalPage = Math.Ceiling((decimal)_dbContext.Books.Count() / 4);
             return View(model);
+
+        }
+        [HttpPost("placerorder/{id}", Name = "client-shopping-placerorder")]
+        public async Task<IActionResult> PlaceOrder([FromRoute] int id)
+        {
+            var model = new OrderViewModel
+            {
+                SumTotal = (int)_dbContext.BasketProducts
+                  .Where(bp => bp.Basket.UserId == _userService.CurrentUser.Id).Sum(bp => bp.Book.Price * bp.Quantity),
+                Models = await _dbContext.BasketProducts
+                  .Where(bp => bp.Basket.UserId == _userService.CurrentUser.Id)
+                  .Select(bp =>
+                      new OrderViewModel.ItemViewModel(
+                          bp.BookId,
+                          bp.Book.Title,
+                          bp.Quantity,
+                          bp.Book.Price,
+                          bp.Book.Price * bp.Quantity
+                          ))
+                  .ToListAsync()
+            };
+
+            //await Task.WhenAll
+            //    (  _orderService.AddOrderAsync(model.SumTotal),
+            //       _orderService.AddOrderProductAsync(model, order.Id)
+            //    );
+
+            var order = await _orderService.AddOrderAsync(model.SumTotal);
+
+
+
+            await _orderService.AddOrderProductAsync(model, order.Id);
+
+            var pasketProducts = await _dbContext.BasketProducts
+                        .Where(bp => bp.Basket.UserId == _userService.CurrentUser.Id)
+                       .ToListAsync();
+
+            _dbContext.BasketProducts.RemoveRange(pasketProducts);
+
+
+            await _dbContext.SaveChangesAsync();
+
+            return RedirectToRoute("client-account-orders");
+
         }
     }
 }

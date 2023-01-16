@@ -19,6 +19,15 @@ namespace DemoApplication.Database.Configurations
                 .HasOne(u => u.Address)
                 .WithOne(b => b.User)
                 .HasForeignKey<Addres>(u => u.UserId);
+            builder
+            .HasOne(u => u.Roles)
+            .WithMany(r => r.Users)
+            .HasForeignKey(u => u.RoleId);
+
+            builder
+                .HasOne(u => u.UserActivation)
+                .WithOne(ua => ua.User)
+                .HasForeignKey<UserActivation>(ua => ua.UserId);
         }
     }
 }
